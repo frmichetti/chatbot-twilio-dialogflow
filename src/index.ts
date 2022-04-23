@@ -129,11 +129,11 @@ app.use('/dialogflow_webhook', async (request: Request, response: Response) => {
             buttonUrl: 'https://assistant.google.com/'
         })
         );
+
+        agent.add(new Suggestion(`Quick Reply`));
+        agent.add(new Suggestion(`Suggestion`));
+        agent.setContext({ name: 'weather', lifespan: 2, parameters: { city: 'Rome' } });
     }
-    //   agent.add(new Suggestion(`Quick Reply`));
-    //   agent.add(new Suggestion(`Suggestion`));
-    //   agent.setContext({ name: 'weather', lifespan: 2, parameters: { city: 'Rome' }});
-    // }
 
     // // Uncomment and edit to make your own Google Assistant intent handler
     // // uncomment `intentMap.set('your intent name here', googleAssistantHandler);`
