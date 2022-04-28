@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
 import bodyParser from "body-parser";
+import { Pay } from 'twilio/lib/twiml/VoiceResponse';
 
 const app: Express = express();
 const port = process.env.PORT || 4000;
@@ -140,12 +141,35 @@ app.use('/dialogflow_webhook', async (request: Request, response: Response) => {
         // console.log(agent)
         const params = agent.contexts[0].parameters
 
-        const hashPayload = {
+        type shipinfo = {
+            address: string,
+            address2: string,
+            country: string,
+            state: string,
+            zipCode: string
+        }
+
+        type itemCart = { id: string, title: string, unit_price: number, quantity: number, tangible: boolean }
+
+        type Payload = {
+            code: string
+            customer: {
+                name: string,
+                lastName: string,
+                whatsApp: string,
+                email: string,
+                shipinfo: shipinfo
+            }
+            cart: Array<itemCart>
+        }
+
+
+        const hashPayload: Payload = {
             code: "123AX",
             customer: {
                 name: params.nome,
                 lastName: params.sobrenome,
-                whatsApp: "12991552277",
+                whatsApp: params.whatsApp,
                 email: params.email,
                 shipinfo: {
                     address: params.endereco,
@@ -155,27 +179,34 @@ app.use('/dialogflow_webhook', async (request: Request, response: Response) => {
                     zipCode: params.cep
                 }
             },
-            cart: [
-                {
-                    id: "r123asdasdasd",
-                    title: params.produto,
-                    unit_price: 10000,
-                    quantity: params.quantidade,
-                    tangible: true
-                }
-            ]
+            cart: []
         }
 
-        const jsonString: string = JSON.stringify(hashPayload)
-        //@ts-ignore
-        const hash = Buffer.from(jsonString.replaceAll("\n", "")).toString('base64')
+        const qty = params.quantidade
 
-        console.log(hash)
+
+        for (let i = 0; i < qty ; i++) {
+
+            hashPayload.cart.push({
+
+                id: "r123asdasdasd",
+                title: params.produto,
+                unit_price: 100000,
+                quantity: 1,
+                tangible: true
+            })
+        }
+
+
+        const jsonString: string = JSON.stringify(hashPayload)
+        
+        //@ts-ignore
+        const hash = Buffer.from(jsonString.replaceAll("\n", "")).toString('base64')        
 
         agent.add("Muito Obrigado")
         agent.add(`Por favor efetue o pagamento na url:`)
         agent.add(`https://pagarme-micro.herokuapp.com/cart?hash=${hash}`)
-        
+
         /*agent.add(new Card({
             title: `Hora do Pagamento`,
             imageUrl: 'https://logopng.com.br/logos/google-37.svg',
