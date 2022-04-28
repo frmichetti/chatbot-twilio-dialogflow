@@ -135,6 +135,57 @@ app.use('/dialogflow_webhook', async (request: Request, response: Response) => {
         agent.setContext({ name: 'weather', lifespan: 2, parameters: { city: 'Rome' } });
     }
 
+    function getBuyFormParameter(agent: any) {
+        // agent.add("Response from Webhook Fullfilment")
+        // console.log(agent)
+        const params = agent.contexts[0].parameters
+
+        const hashPayload = {
+            code: "123AX",
+            customer: {
+                name: params.nome,
+                lastName: params.sobrenome,
+                whatsApp: "12991552277",
+                email: params.email,
+                shipinfo: {
+                    address: params.endereco,
+                    address2: params.complemento,
+                    country: params.pais,
+                    state: params.estado,
+                    zipCode: params.cep
+                }
+            },
+            cart: [
+                {
+                    id: "r123asdasdasd",
+                    title: params.produto,
+                    unit_price: 10000,
+                    quantity: params.quantidade,
+                    tangible: true
+                }
+            ]
+        }
+
+        const jsonString: string = JSON.stringify(hashPayload)
+        //@ts-ignore
+        const hash = Buffer.from(jsonString.replaceAll("\n", "")).toString('base64')
+
+        console.log(hash)
+
+        agent.add("Muito Obrigado")
+        agent.add(`Por favor efetue o pagamento na url:`)
+        agent.add(`https://pagarme-micro.herokuapp.com/cart?hash=${hash}`)
+        
+        /*agent.add(new Card({
+            title: `Hora do Pagamento`,
+            imageUrl: 'https://logopng.com.br/logos/google-37.svg',
+            text: `Por favor efetue o pagamento através de nosso Gateway`,
+            buttonText: 'Pagar',
+            buttonUrl: `https://pagarme-micro.herokuapp.com/cart?hash=${hash}`
+        })
+        );*/
+    }
+
     // // Uncomment and edit to make your own Google Assistant intent handler
     // // uncomment `intentMap.set('your intent name here', googleAssistantHandler);`
     // // below to get this function to be run when a Dialogflow intent is matched
@@ -151,7 +202,7 @@ app.use('/dialogflow_webhook', async (request: Request, response: Response) => {
     intentMap.set('Default Welcome Intent', welcome);
     intentMap.set('Default Fallback Intent', fallback);
     intentMap.set('Fulfillment', yourFunctionHandler);
-    // intentMap.set('your intent name here', googleAssistantHandler);
+    intentMap.set('Comprar - quantos - produtos - confirmacao', getBuyFormParameter);
     agent.handleRequest(intentMap);
 });
 
