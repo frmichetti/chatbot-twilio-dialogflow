@@ -3,6 +3,7 @@ import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
 import bodyParser from "body-parser";
 import { Pay } from 'twilio/lib/twiml/VoiceResponse';
+import axios from 'axios'
 
 const app: Express = express();
 const port = process.env.PORT || 4000;
@@ -22,6 +23,14 @@ const dialogFlowClient = new dialogflow.SessionsClient();
 app.use(cors());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
+
+//@ts-ignore
+Date.prototype.addDays = function (days) {
+    var date = new Date(this.valueOf());
+    date.setDate(date.getDate() + days);
+    return date;
+}
+
 
 app.get('/', (req: Request, res: Response) => {
     res.send('Express + TypeScript Server');
@@ -117,9 +126,6 @@ app.use('/dialogflow_webhook', async (request: Request, response: Response) => {
         agent.add(`I'm sorry, can you try again?`);
     }
 
-    // // Uncomment and edit to make your own intent handler
-    // // uncomment `intentMap.set('your intent name here', yourFunctionHandler);`
-    // // below to get this function to be run when a Dialogflow intent is matched
     function yourFunctionHandler(agent: any) {
         agent.add(`This message is from Dialogflow's Cloud Functions for Firebase editor!`);
         agent.add(new Card({
@@ -136,11 +142,7 @@ app.use('/dialogflow_webhook', async (request: Request, response: Response) => {
         agent.setContext({ name: 'weather', lifespan: 2, parameters: { city: 'Rome' } });
     }
 
-    function getBuyFormParameter(agent: any) {
-        // agent.add("Response from Webhook Fullfilment")
-        // console.log(agent)
-        const params = agent.contexts[0].parameters
-
+    async function getBuyFormParameter(agent: any) {
         type shipinfo = {
             address: string,
             address2: string,
@@ -163,72 +165,102 @@ app.use('/dialogflow_webhook', async (request: Request, response: Response) => {
             cart: Array<itemCart>
         }
 
+        const params = agent.contexts[0].parameters
 
-        const hashPayload: Payload = {
-            code: "123AX",
-            customer: {
-                name: params.nome,
-                lastName: params.sobrenome,
-                whatsApp: params.whatsApp,
-                email: params.email,
-                shipinfo: {
-                    address: params.endereco,
-                    address2: params.complemento,
-                    country: params.pais,
-                    state: params.estado,
-                    zipCode: params.cep
-                }
-            },
-            cart: []
+        if (params.metodopagamento == 'Cartão de Crédito') {
+            const hashPayload: Payload = {
+                code: "123AX",
+                customer: {
+                    name: params.nome,
+                    lastName: params.sobrenome,
+                    whatsApp: params.whatsApp,
+                    email: params.email,
+                    shipinfo: {
+                        address: params.endereco,
+                        address2: params.complemento,
+                        country: params.pais,
+                        state: params.estado,
+                        zipCode: params.cep
+                    }
+                },
+                cart: []
+            }
+
+            const qty = params.quantidade
+
+
+            for (let i = 0; i < qty; i++) {
+
+                hashPayload.cart.push({
+
+                    id: "r123asdasdasd",
+                    title: params.produto,
+                    unit_price: 100000,
+                    quantity: 1,
+                    tangible: true
+                })
+            }
+
+
+            const jsonString: string = JSON.stringify(hashPayload)
+
+            //@ts-ignore
+            const hash = Buffer.from(jsonString.replaceAll("\n", "")).toString('base64')
+
+            agent.add("Muito Obrigado")
+            agent.add(`Por favor efetue o pagamento na url:`)
+            agent.add(`https://pagarme-micro.herokuapp.com/cart?hash=${hash}`)
+
+        } else if (params.metodopagamento == 'Pix') {
+            const total = params.quantidade * 1000
+            const payload = {
+                key_type: "Cpf",
+                key: "385.995.868-23",
+                name: "Felipe Rodrigues Michetti",
+                city: "Sao Paulo",
+                amount: `R$ ${total},00`,
+                reference: "Pagamento"
+            }
+
+            const { data } = await axios.post('https://pix-micro.herokuapp.com/emvqr-static', payload)
+            const shareUrl = data.share_url
+            const code = data.code
+
+            agent.add("Muito Obrigado")
+            agent.add(`Por favor efetue o pagamento do QrCode`)
+            agent.add(shareUrl)
+            agent.add("Ou pelo código")
+            agent.add(code)
+
+
+        } else if (params.metodopagamento == 'Boleto') {
+            const total = params.quantidade * 1000
+            const payload = {
+                bank: { name: "Itaú" }, valor: `${total}`,
+                data_documento: new Date(),
+                //@ts-ignore
+                data_vencimento: new Date().addDays(5), 
+                agencia: "1172",
+                local_pagamento: "QUALQUER BANCO ATÉ O VENCIMENTO", 
+                cedente: "Felipe Rodrigues Michetti", documento_cedente: "38599586823",
+                sacado: `${params.nome} ${params.sobrenome}`, 
+                documento_sacado: params.cpf, conta_corrente: "14035", convenio: "12387", nosso_numero: "75896452"
+            }
+
+            const { data } = await axios.post(`https://bank-slipper-micro.herokuapp.com/generate?bank=itau`, payload)
+
+            const finalUrl = `https://bank-slipper-micro.herokuapp.com${data.url}`
+
+            agent.add("Muito Obrigado")
+            agent.add(`Por favor efetue o pagamento do seu Boleto`)
+            agent.add(finalUrl)
+
+        } else {
+            agent.add("Método de Pagamento inválido")
         }
 
-        const qty = params.quantidade
-
-
-        for (let i = 0; i < qty ; i++) {
-
-            hashPayload.cart.push({
-
-                id: "r123asdasdasd",
-                title: params.produto,
-                unit_price: 100000,
-                quantity: 1,
-                tangible: true
-            })
-        }
-
-
-        const jsonString: string = JSON.stringify(hashPayload)
-        
-        //@ts-ignore
-        const hash = Buffer.from(jsonString.replaceAll("\n", "")).toString('base64')        
-
-        agent.add("Muito Obrigado")
-        agent.add(`Por favor efetue o pagamento na url:`)
-        agent.add(`https://pagarme-micro.herokuapp.com/cart?hash=${hash}`)
-
-        /*agent.add(new Card({
-            title: `Hora do Pagamento`,
-            imageUrl: 'https://logopng.com.br/logos/google-37.svg',
-            text: `Por favor efetue o pagamento através de nosso Gateway`,
-            buttonText: 'Pagar',
-            buttonUrl: `https://pagarme-micro.herokuapp.com/cart?hash=${hash}`
-        })
-        );*/
     }
 
-    // // Uncomment and edit to make your own Google Assistant intent handler
-    // // uncomment `intentMap.set('your intent name here', googleAssistantHandler);`
-    // // below to get this function to be run when a Dialogflow intent is matched
-    // function googleAssistantHandler(agent) {
-    //   let conv = agent.conv(); // Get Actions on Google library conv instance
-    //   conv.ask('Hello from the Actions on Google client library!') // Use Actions on Google library
-    //   agent.add(conv); // Add Actions on Google library responses to your agent's response
-    // }
-    // // See https://github.com/dialogflow/fulfillment-actions-library-nodejs
-    // // for a complete Dialogflow fulfillment library Actions on Google client library v2 integration sample
-
-    // Run the proper function handler based on the matched Dialogflow intent name
     let intentMap = new Map();
     intentMap.set('Default Welcome Intent', welcome);
     intentMap.set('Default Fallback Intent', fallback);
